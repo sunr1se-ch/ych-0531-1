@@ -13,11 +13,13 @@ import { api } from '../utils/api';
 type TabType = 'humidity' | 'inspect' | 'defrost';
 
 export default function DataEntry() {
-  const { dehumidifiers, collections, refreshAll, fetchDehumidifiers, fetchCollections } = useStore();
+  const { dehumidifiers, collections, refreshAll, fetchDehumidifiers, fetchCollections, systemConfig } = useStore();
   const [activeTab, setActiveTab] = useState<TabType>('humidity');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const humidityThreshold = systemConfig?.humidityThreshold ?? 58;
 
   const [humidityForm, setHumidityForm] = useState({
     dehumidifierId: '',
@@ -150,7 +152,7 @@ export default function DataEntry() {
     { id: 'defrost' as TabType, label: '除霜确认', icon: Snowflake, color: 'red' },
   ];
 
-  const pendingDehumidifiers = dehumidifiers.filter((d) => d.status === 'pending_defrost');
+  const pendingDehumidifiers = dehumidifiers.filter((d) => d.isPendingDefrost);
   const inStockCollections = collections.filter((c) => c.status === 'in_stock');
 
   return (
@@ -245,7 +247,7 @@ export default function DataEntry() {
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
                 />
                 <p className="mt-1 text-sm text-slate-500">
-                  阈值：58%，超过阈值可能触发待除霜预警
+                  阈值：{humidityThreshold}%，超过阈值可能触发待除霜预警
                 </p>
               </div>
 

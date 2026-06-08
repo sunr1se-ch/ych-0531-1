@@ -11,6 +11,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { Prisma } from '@prisma/client'
 import authRoutes from './routes/auth.js'
+import configRoutes from './routes/config.js'
 import dehumidifierRoutes from './routes/dehumidifiers.js'
 import humidityRoutes from './routes/humidity.js'
 import defrostTodoRoutes from './routes/defrostTodo.js'
@@ -29,6 +30,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
  * API Routes
  */
 app.use('/api/auth', authRoutes)
+app.use('/api/config', configRoutes)
 app.use('/api/dehumidifiers', dehumidifierRoutes)
 app.use('/api/humidity', humidityRoutes)
 app.use('/api/defrost-todo', defrostTodoRoutes)

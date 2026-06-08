@@ -30,7 +30,7 @@ router.post('/batch-confirm', asyncHandler(async (req: Request, res: Response) =
     ids.map((id: number) => confirmDefrost(id, operatorName, remark))
   );
   
-  res.json({ success: true, data: results });
+  res.json({ success: true, data: results.map(r => ({ ...r.dehumidifier, ...r.summary })) });
 }));
 
 export default router;

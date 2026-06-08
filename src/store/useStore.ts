@@ -1,17 +1,21 @@
 import { create } from 'zustand';
-import type { Dehumidifier, CollectionBatch, DefrostTodoItem } from '../types';
+import type { Dehumidifier, CollectionBatch, DefrostTodoItem, SystemConfig, InspectionWorkbenchItem } from '../types';
 import { api } from '../utils/api';
 
 interface AppState {
   dehumidifiers: Dehumidifier[];
   collections: CollectionBatch[];
   defrostTodos: DefrostTodoItem[];
+  workbenchItems: InspectionWorkbenchItem[];
+  systemConfig: SystemConfig | null;
   loading: boolean;
   error: string | null;
   selectedStatusFilter: string;
+  fetchSystemConfig: () => Promise<void>;
   fetchDehumidifiers: (status?: string) => Promise<void>;
   fetchCollections: () => Promise<void>;
   fetchDefrostTodos: () => Promise<void>;
+  fetchWorkbench: () => Promise<InspectionWorkbenchItem[]>;
   setStatusFilter: (status: string) => void;
   refreshAll: () => Promise<void>;
 }
@@ -20,9 +24,20 @@ export const useStore = create<AppState>((set, get) => ({
   dehumidifiers: [],
   collections: [],
   defrostTodos: [],
+  workbenchItems: [],
+  systemConfig: null,
   loading: false,
   error: null,
   selectedStatusFilter: 'all',
+
+  fetchSystemConfig: async () => {
+    try {
+      const response = await api.config.get();
+      set({ systemConfig: response.data });
+    } catch (err) {
+      console.error('Failed to fetch system config:', err);
+    }
+  },
 
   fetchDehumidifiers: async (status?: string) => {
     set({ loading: true, error: null });
@@ -55,6 +70,17 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  fetchWorkbench: async () => {
+    try {
+      const response = await api.inspection.getWorkbench();
+      set({ workbenchItems: response.data });
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch workbench:', err);
+      return [];
+    }
+  },
+
   setStatusFilter: (status: string) => {
     set({ selectedStatusFilter: status });
   },
@@ -64,6 +90,7 @@ export const useStore = create<AppState>((set, get) => ({
       get().fetchDehumidifiers(),
       get().fetchCollections(),
       get().fetchDefrostTodos(),
+      get().fetchWorkbench(),
     ]);
   },
 }));

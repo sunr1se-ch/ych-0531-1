@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { updateDehumidifierStatusIfNeeded } from '../services/defrostService.js';
+import { updateDehumidifierStatusIfNeeded, buildDehumidifierSummary } from '../services/defrostService.js';
 
 const router = express.Router();
 
@@ -32,9 +32,27 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   
   await updateDehumidifierStatusIfNeeded(parseInt(dehumidifierId));
   
+  const dehumidifier = await prisma.dehumidifier.findUniqueOrThrow({
+    where: { id: parseInt(dehumidifierId) },
+    include: {
+      humidityRecords: {
+        orderBy: { recordedAt: 'desc' },
+        take: 10,
+      },
+      _count: {
+        select: { collectionBatches: { where: { status: 'in_stock' } } },
+      },
+    },
+  });
+  
+  const summary = buildDehumidifierSummary(dehumidifier);
+  
   res.json({
     success: true,
-    data: { ...record, humidity: record.humidity.toNumber() },
+    data: { 
+      record: { ...record, humidity: record.humidity.toNumber() },
+      summary,
+    },
   });
 }));
 

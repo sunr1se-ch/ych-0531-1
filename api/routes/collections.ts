@@ -1,13 +1,24 @@
 import express, { type Request, type Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { buildDehumidifierSummary } from '../services/defrostService.js';
 
 const router = express.Router();
 
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const batches = await prisma.collectionBatch.findMany({
     include: {
-      dehumidifier: true,
+      dehumidifier: {
+        include: {
+          humidityRecords: {
+            orderBy: { recordedAt: 'desc' },
+            take: 10,
+          },
+          _count: {
+            select: { collectionBatches: { where: { status: 'in_stock' } } },
+          },
+        },
+      },
       inspectionRecords: {
         orderBy: { inspectionDate: 'desc' },
         take: 1,
@@ -23,6 +34,7 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const result = batches.map((batch) => {
     const latestInspection = batch.inspectionRecords[0];
     const latestOutbound = batch.outboundLogs[0];
+    const dehumidifierSummary = buildDehumidifierSummary(batch.dehumidifier);
     return {
       ...batch,
       latestInspection: latestInspection ? {
@@ -31,10 +43,10 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
       } : null,
       latestOutbound,
       dehumidifier: {
-        id: batch.dehumidifier.id,
-        name: batch.dehumidifier.name,
-        code: batch.dehumidifier.code,
-        status: batch.dehumidifier.status,
+        id: dehumidifierSummary.id,
+        name: dehumidifierSummary.name,
+        code: dehumidifierSummary.code,
+        status: dehumidifierSummary.status,
       },
     };
   });
@@ -47,10 +59,23 @@ router.get('/check-outbound-allowed/:id', asyncHandler(async (req: Request, res:
   
   const batch = await prisma.collectionBatch.findUniqueOrThrow({
     where: { id },
-    include: { dehumidifier: true },
+    include: { 
+      dehumidifier: {
+        include: {
+          humidityRecords: {
+            orderBy: { recordedAt: 'desc' },
+            take: 10,
+          },
+          _count: {
+            select: { collectionBatches: { where: { status: 'in_stock' } } },
+          },
+        },
+      },
+    },
   });
   
-  const isAllowed = batch.dehumidifier.status !== 'pending_defrost';
+  const dehumidifierSummary = buildDehumidifierSummary(batch.dehumidifier);
+  const isAllowed = !dehumidifierSummary.isPendingDefrost;
   const isOutOfStock = batch.status === 'out_of_stock';
   
   res.json({
@@ -58,10 +83,10 @@ router.get('/check-outbound-allowed/:id', asyncHandler(async (req: Request, res:
     data: {
       isAllowed: isAllowed && !isOutOfStock,
       isOutOfStock,
-      dehumidifierStatus: batch.dehumidifier.status,
-      dehumidifierName: batch.dehumidifier.name,
+      dehumidifierStatus: dehumidifierSummary.status,
+      dehumidifierName: dehumidifierSummary.name,
       warning: !isAllowed
-        ? `该藏品所属除湿机「${batch.dehumidifier.name}」处于待除霜状态，强行出库可能导致藏品损坏`
+        ? `该藏品所属除湿机「${dehumidifierSummary.name}」处于待除霜状态，强行出库可能导致藏品损坏`
         : null,
     },
   });
@@ -80,7 +105,19 @@ router.post('/:id/outbound', asyncHandler(async (req: Request, res: Response) =>
   
   const batch = await prisma.collectionBatch.findUniqueOrThrow({
     where: { id },
-    include: { dehumidifier: true },
+    include: { 
+      dehumidifier: {
+        include: {
+          humidityRecords: {
+            orderBy: { recordedAt: 'desc' },
+            take: 10,
+          },
+          _count: {
+            select: { collectionBatches: { where: { status: 'in_stock' } } },
+          },
+        },
+      },
+    },
   });
   
   if (batch.status === 'out_of_stock') {
@@ -90,7 +127,8 @@ router.post('/:id/outbound', asyncHandler(async (req: Request, res: Response) =>
     });
   }
   
-  const isForceOutbound = batch.dehumidifier.status === 'pending_defrost';
+  const dehumidifierSummary = buildDehumidifierSummary(batch.dehumidifier);
+  const isForceOutbound = dehumidifierSummary.isPendingDefrost;
   
   await prisma.$transaction(async (tx) => {
     await tx.outboundLog.create({
@@ -115,7 +153,17 @@ router.post('/:id/outbound', asyncHandler(async (req: Request, res: Response) =>
   const updatedBatch = await prisma.collectionBatch.findUniqueOrThrow({
     where: { id },
     include: {
-      dehumidifier: true,
+      dehumidifier: {
+        include: {
+          humidityRecords: {
+            orderBy: { recordedAt: 'desc' },
+            take: 10,
+          },
+          _count: {
+            select: { collectionBatches: { where: { status: 'in_stock' } } },
+          },
+        },
+      },
       inspectionRecords: {
         orderBy: { inspectionDate: 'desc' },
         take: 1,
@@ -127,10 +175,20 @@ router.post('/:id/outbound', asyncHandler(async (req: Request, res: Response) =>
     },
   });
   
+  const updatedDehumidifierSummary = buildDehumidifierSummary(updatedBatch.dehumidifier);
+  
   res.json({
     success: true,
     data: {
-      batch: updatedBatch,
+      batch: {
+        ...updatedBatch,
+        dehumidifier: {
+          id: updatedDehumidifierSummary.id,
+          name: updatedDehumidifierSummary.name,
+          code: updatedDehumidifierSummary.code,
+          status: updatedDehumidifierSummary.status,
+        },
+      },
       isForceOutbound,
       warning: isForceOutbound
         ? '警告：该藏品所属除湿机处于待除霜状态，此次出库存有藏品损坏风险'

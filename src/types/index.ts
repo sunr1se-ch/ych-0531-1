@@ -1,3 +1,9 @@
+export interface SystemConfig {
+  humidityThreshold: number;
+  consecutiveHighCount: number;
+  overdueHours: number;
+}
+
 export interface Dehumidifier {
   id: number;
   name: string;
@@ -10,6 +16,10 @@ export interface Dehumidifier {
   latestHumidity: number | null;
   hoursSinceLastDefrost: number;
   consecutiveHighHumidity: number;
+  hoursOverdue: number;
+  isPendingDefrost: boolean;
+  isOverdue: boolean;
+  allHighHumidity: boolean;
   affectedBatches: number;
 }
 

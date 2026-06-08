@@ -1,9 +1,38 @@
 import express, { type Request, type Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { checkPendingDefrost } from '../services/defrostService.js';
+import { buildDehumidifierSummary } from '../services/defrostService.js';
 
 const router = express.Router();
+
+function buildCollectionBatches(batches: Array<{
+  id: number;
+  batchNo: string;
+  name: string;
+  status: string;
+  inspectionRecords: Array<{
+    id: number;
+    paperWarpMm: { toNumber: () => number };
+    inspectionDate: Date;
+    inspectorName: string;
+  }>;
+}>) {
+  return batches.map((batch) => {
+    const latestInspection = batch.inspectionRecords[0];
+    return {
+      id: batch.id,
+      batchNo: batch.batchNo,
+      name: batch.name,
+      status: batch.status,
+      latestInspection: latestInspection ? {
+        id: latestInspection.id,
+        paperWarpMm: latestInspection.paperWarpMm.toNumber(),
+        inspectionDate: latestInspection.inspectionDate,
+        inspectorName: latestInspection.inspectorName,
+      } : null,
+    };
+  });
+}
 
 router.get('/workbench', asyncHandler(async (_req: Request, res: Response) => {
   const dehumidifiers = await prisma.dehumidifier.findMany({
@@ -29,40 +58,11 @@ router.get('/workbench', asyncHandler(async (_req: Request, res: Response) => {
   });
 
   const result = dehumidifiers.map((d) => {
-    const checkResult = checkPendingDefrost(d, d.humidityRecords);
-    const latestHumidity = d.humidityRecords[0];
-    const hoursOverdue = Math.max(0, checkResult.hoursSinceLastDefrost - d.defrostIntervalHours);
-    
-    const collectionBatches = d.collectionBatches.map((batch) => {
-      const latestInspection = batch.inspectionRecords[0];
-      return {
-        id: batch.id,
-        batchNo: batch.batchNo,
-        name: batch.name,
-        status: batch.status,
-        latestInspection: latestInspection ? {
-          id: latestInspection.id,
-          paperWarpMm: latestInspection.paperWarpMm.toNumber(),
-          inspectionDate: latestInspection.inspectionDate,
-          inspectorName: latestInspection.inspectorName,
-        } : null,
-      };
-    });
+    const summary = buildDehumidifierSummary(d);
+    const collectionBatches = buildCollectionBatches(d.collectionBatches);
 
     return {
-      id: d.id,
-      name: d.name,
-      code: d.code,
-      status: d.status,
-      coolingZone: d.coolingZone,
-      defrostIntervalHours: d.defrostIntervalHours,
-      lastDefrostAt: d.lastDefrostAt,
-      latestHumidity: latestHumidity?.humidity.toNumber() ?? null,
-      hoursSinceLastDefrost: checkResult.hoursSinceLastDefrost,
-      consecutiveHighHumidity: checkResult.consecutiveHighHumidity,
-      hoursOverdue,
-      isPendingDefrost: d.status === 'pending_defrost',
-      affectedBatches: d._count.collectionBatches,
+      ...summary,
       collectionBatches,
     };
   });
@@ -109,47 +109,19 @@ router.get('/dehumidifier/:id/detail', asyncHandler(async (req: Request, res: Re
     }),
   ]);
 
-  const checkResult = checkPendingDefrost(dehumidifier, dehumidifier.humidityRecords);
-  const latestHumidity = dehumidifier.humidityRecords[0];
-  const hoursOverdue = Math.max(0, checkResult.hoursSinceLastDefrost - dehumidifier.defrostIntervalHours);
+  const summary = buildDehumidifierSummary(dehumidifier);
 
   const humidityData = humidityRecords.map(r => ({
     ...r,
     humidity: r.humidity.toNumber(),
   })).reverse();
 
-  const collectionBatches = dehumidifier.collectionBatches.map((batch) => {
-    const latestInspection = batch.inspectionRecords[0];
-    return {
-      id: batch.id,
-      batchNo: batch.batchNo,
-      name: batch.name,
-      status: batch.status,
-      latestInspection: latestInspection ? {
-        id: latestInspection.id,
-        paperWarpMm: latestInspection.paperWarpMm.toNumber(),
-        inspectionDate: latestInspection.inspectionDate,
-        inspectorName: latestInspection.inspectorName,
-      } : null,
-    };
-  });
+  const collectionBatches = buildCollectionBatches(dehumidifier.collectionBatches);
 
   res.json({
     success: true,
     data: {
-      id: dehumidifier.id,
-      name: dehumidifier.name,
-      code: dehumidifier.code,
-      status: dehumidifier.status,
-      coolingZone: dehumidifier.coolingZone,
-      defrostIntervalHours: dehumidifier.defrostIntervalHours,
-      lastDefrostAt: dehumidifier.lastDefrostAt,
-      latestHumidity: latestHumidity?.humidity.toNumber() ?? null,
-      hoursSinceLastDefrost: checkResult.hoursSinceLastDefrost,
-      consecutiveHighHumidity: checkResult.consecutiveHighHumidity,
-      hoursOverdue,
-      isPendingDefrost: dehumidifier.status === 'pending_defrost',
-      affectedBatches: dehumidifier._count.collectionBatches,
+      ...summary,
       humidityData,
       collectionBatches,
     },

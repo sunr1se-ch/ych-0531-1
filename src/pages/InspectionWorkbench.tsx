@@ -26,8 +26,6 @@ import { formatDateTime, formatHours, getStatusText, getStatusColor, formatDate 
 import { useStore } from '../store/useStore';
 import type { InspectionWorkbenchItem, InspectionWorkbenchDetail, InspectionBatch, HumidityRecord } from '../types';
 
-const HUMIDITY_THRESHOLD = 58;
-
 interface HumidityChartData {
   time: string;
   humidity: number;
@@ -35,12 +33,16 @@ interface HumidityChartData {
 }
 
 export default function InspectionWorkbench() {
-  const { refreshAll } = useStore();
-  const [devices, setDevices] = useState<InspectionWorkbenchItem[]>([]);
+  const { refreshAll, systemConfig, workbenchItems, fetchWorkbench } = useStore();
   const [selectedDevice, setSelectedDevice] = useState<InspectionWorkbenchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const humidityThreshold = systemConfig?.humidityThreshold ?? 58;
+  const consecutiveHighCount = systemConfig?.consecutiveHighCount ?? 3;
+
+  const devices = workbenchItems;
 
   const [showDefrostModal, setShowDefrostModal] = useState(false);
   const [showInspectModal, setShowInspectModal] = useState(false);
@@ -55,21 +57,6 @@ export default function InspectionWorkbench() {
     inspectorName: '',
   });
 
-  const fetchWorkbench = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.inspection.getWorkbench();
-      setDevices(res.data);
-      if (res.data.length > 0 && !selectedDevice) {
-        fetchDetail(res.data[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to fetch workbench:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedDevice]);
-
   const fetchDetail = async (id: number) => {
     setDetailLoading(true);
     try {
@@ -82,13 +69,27 @@ export default function InspectionWorkbench() {
     }
   };
 
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchWorkbench();
+      if (data.length > 0 && !selectedDevice) {
+        fetchDetail(data[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to fetch workbench:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchWorkbench, selectedDevice]);
+
   useEffect(() => {
-    fetchWorkbench();
-  }, [fetchWorkbench]);
+    loadData();
+  }, [loadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchWorkbench();
+    await refreshAll();
     if (selectedDevice) {
       await fetchDetail(selectedDevice.id);
     }
@@ -217,7 +218,7 @@ export default function InspectionWorkbench() {
       minute: '2-digit',
     }),
     humidity: record.humidity,
-    isHigh: record.humidity > HUMIDITY_THRESHOLD,
+    isHigh: record.humidity > humidityThreshold,
   })) || [];
 
   const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: HumidityChartData }>; label?: string }) => {
@@ -228,12 +229,12 @@ export default function InspectionWorkbench() {
           <p className="text-sm text-slate-500">{label}</p>
           <p
             className={`text-lg font-bold ${
-              data.humidity > HUMIDITY_THRESHOLD ? 'text-red-600' : 'text-teal-600'
+              data.humidity > humidityThreshold ? 'text-red-600' : 'text-teal-600'
             }`}
           >
             {data.humidity.toFixed(1)}%
           </p>
-          {data.humidity > HUMIDITY_THRESHOLD && (
+          {data.humidity > humidityThreshold && (
             <p className="text-xs text-red-500 mt-1">超出阈值</p>
           )}
         </div>
@@ -335,7 +336,7 @@ export default function InspectionWorkbench() {
                       <div className="text-center p-2 bg-white/60 rounded-lg">
                         <div className="text-xs text-slate-500 mb-1">湿度</div>
                         <div className={`text-sm font-bold ${
-                          device.latestHumidity && device.latestHumidity > HUMIDITY_THRESHOLD
+                          device.latestHumidity && device.latestHumidity > humidityThreshold
                             ? 'text-red-600'
                             : 'text-teal-600'
                         }`}>
@@ -387,7 +388,7 @@ export default function InspectionWorkbench() {
                       湿度趋势（近72小时）
                     </h3>
                     <div className="text-sm text-slate-500">
-                      阈值：<span className="font-medium text-red-600">{HUMIDITY_THRESHOLD}%</span>
+                      阈值：<span className="font-medium text-red-600">{humidityThreshold}%</span>
                     </div>
                   </div>
                   <div className="h-48">
@@ -418,12 +419,12 @@ export default function InspectionWorkbench() {
                         />
                         <Tooltip content={<CustomTooltip />} />
                         <ReferenceLine
-                          y={HUMIDITY_THRESHOLD}
+                          y={humidityThreshold}
                           stroke="#EF4444"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                           label={{
-                            value: '58%',
+                            value: `${humidityThreshold}%`,
                             position: 'right',
                             fill: '#EF4444',
                             fontSize: 10,
@@ -436,7 +437,7 @@ export default function InspectionWorkbench() {
                           strokeWidth={2}
                           fill="url(#miniColorHumidity)"
                           dot={(props) => {
-                            if (props.payload.humidity > HUMIDITY_THRESHOLD) {
+                            if (props.payload.humidity > humidityThreshold) {
                               return (
                                 <circle
                                   cx={props.cx}
@@ -468,7 +469,7 @@ export default function InspectionWorkbench() {
                   </div>
                   <div className="p-3 bg-slate-50 rounded-lg text-center">
                     <div className="text-xs text-slate-500 mb-1">连续高湿</div>
-                    <div className={`font-semibold ${selectedDevice.consecutiveHighHumidity >= 3 ? 'text-red-600' : 'text-slate-900'}`}>
+                    <div className={`font-semibold ${selectedDevice.consecutiveHighHumidity >= consecutiveHighCount ? 'text-red-600' : 'text-slate-900'}`}>
                       {selectedDevice.consecutiveHighHumidity} 次
                     </div>
                   </div>

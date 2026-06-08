@@ -1,19 +1,14 @@
 import express, { type Request, type Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { checkPendingDefrost, confirmDefrost, updateDehumidifierStatusIfNeeded } from '../services/defrostService.js';
+import { buildDehumidifierSummary, confirmDefrost, updateDehumidifierStatusIfNeeded } from '../services/defrostService.js';
 
 const router = express.Router();
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
   
-  const where = status && status !== 'all' 
-    ? { status: status as string }
-    : undefined;
-  
   const dehumidifiers = await prisma.dehumidifier.findMany({
-    where,
     include: {
       humidityRecords: {
         orderBy: { recordedAt: 'desc' },
@@ -26,16 +21,16 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     orderBy: { createdAt: 'asc' },
   });
   
-  const result = dehumidifiers.map((d) => {
-    const checkResult = checkPendingDefrost(d, d.humidityRecords);
-    const latestHumidity = d.humidityRecords[0];
-    return {
-      ...d,
-      latestHumidity: latestHumidity?.humidity.toNumber() ?? null,
-      hoursSinceLastDefrost: checkResult.hoursSinceLastDefrost,
-      consecutiveHighHumidity: checkResult.consecutiveHighHumidity,
-      affectedBatches: d._count.collectionBatches,
-    };
+  let result = dehumidifiers.map((d) => buildDehumidifierSummary(d));
+  
+  if (status && status !== 'all') {
+    result = result.filter((d) => d.status === status);
+  }
+  
+  result.sort((a, b) => {
+    if (a.isPendingDefrost && !b.isPendingDefrost) return -1;
+    if (!a.isPendingDefrost && b.isPendingDefrost) return 1;
+    return b.hoursOverdue - a.hoursOverdue;
   });
   
   res.json({ success: true, data: result });
@@ -49,7 +44,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     include: {
       humidityRecords: {
         orderBy: { recordedAt: 'desc' },
-        take: 72,
+        take: 10,
       },
       defrostHistories: {
         orderBy: { completedAt: 'desc' },
@@ -61,17 +56,22 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     },
   });
   
-  const checkResult = checkPendingDefrost(dehumidifier, dehumidifier.humidityRecords);
-  const latestHumidity = dehumidifier.humidityRecords[0];
+  const summary = buildDehumidifierSummary(dehumidifier);
+  const humidityRecords = await prisma.humidityRecord.findMany({
+    where: { dehumidifierId: id },
+    orderBy: { recordedAt: 'desc' },
+    take: 72,
+  });
   
   res.json({
     success: true,
     data: {
-      ...dehumidifier,
-      latestHumidity: latestHumidity?.humidity.toNumber() ?? null,
-      hoursSinceLastDefrost: checkResult.hoursSinceLastDefrost,
-      consecutiveHighHumidity: checkResult.consecutiveHighHumidity,
-      affectedBatches: dehumidifier._count.collectionBatches,
+      ...summary,
+      defrostHistories: dehumidifier.defrostHistories,
+      humidityData: humidityRecords.map(r => ({
+        ...r,
+        humidity: r.humidity.toNumber(),
+      })).reverse(),
     },
   });
 }));
@@ -107,13 +107,13 @@ router.post('/:id/confirm-defrost', asyncHandler(async (req: Request, res: Respo
   
   const result = await confirmDefrost(id, operatorName, remark);
   
-  res.json({ success: true, data: result });
+  res.json({ success: true, data: { ...result.dehumidifier, ...result.summary } });
 }));
 
 router.post('/:id/update-status', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const result = await updateDehumidifierStatusIfNeeded(id);
-  res.json({ success: true, data: result });
+  res.json({ success: true, data: { ...result, ...result.summary } });
 }));
 
 export default router;

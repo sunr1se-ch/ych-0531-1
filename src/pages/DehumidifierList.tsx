@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Wind,
@@ -23,10 +23,14 @@ const filterOptions = [
 
 function DehumidifierCard({ dehumidifier }: { dehumidifier: Dehumidifier }) {
   const navigate = useNavigate();
-  const isPending = dehumidifier.status === 'pending_defrost';
+  const { systemConfig } = useStore();
+  const overdueHours = systemConfig?.overdueHours ?? 6;
+  const humidityThreshold = systemConfig?.humidityThreshold ?? 58;
+  
+  const isPending = dehumidifier.isPendingDefrost;
   const progress = calculateProgress(
     dehumidifier.hoursSinceLastDefrost,
-    dehumidifier.defrostIntervalHours + 6
+    dehumidifier.defrostIntervalHours + overdueHours
   );
 
   return (
@@ -84,7 +88,7 @@ function DehumidifierCard({ dehumidifier }: { dehumidifier: Dehumidifier }) {
           </div>
           <p
             className={`font-bold ${
-              dehumidifier.latestHumidity && dehumidifier.latestHumidity > 58
+              dehumidifier.latestHumidity && dehumidifier.latestHumidity > humidityThreshold
                 ? 'text-red-600'
                 : 'text-slate-900'
             }`}
@@ -100,7 +104,7 @@ function DehumidifierCard({ dehumidifier }: { dehumidifier: Dehumidifier }) {
         <div className="flex justify-between text-xs text-slate-500 mb-2">
           <span>距下次除霜</span>
           <span>
-            {formatHours(dehumidifier.hoursSinceLastDefrost)} / {dehumidifier.defrostIntervalHours + 6} 小时
+            {formatHours(dehumidifier.hoursSinceLastDefrost)} / {dehumidifier.defrostIntervalHours + overdueHours} 小时
           </span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -153,8 +157,8 @@ export default function DehumidifierList() {
     await fetchDehumidifiers(status);
   };
 
-  const pendingCount = dehumidifiers.filter((d) => d.status === 'pending_defrost').length;
-  const normalCount = dehumidifiers.filter((d) => d.status === 'normal').length;
+  const pendingCount = dehumidifiers.filter((d) => d.isPendingDefrost).length;
+  const normalCount = dehumidifiers.filter((d) => !d.isPendingDefrost).length;
 
   return (
     <div className="space-y-6">

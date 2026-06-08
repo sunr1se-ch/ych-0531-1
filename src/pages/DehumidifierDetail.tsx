@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  Wind,
-  Clock,
   Droplets,
   ThermometerSnowflake,
   AlertTriangle,
@@ -14,8 +12,6 @@ import {
   Calendar,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -27,9 +23,8 @@ import {
 } from 'recharts';
 import { api } from '../utils/api';
 import { formatDateTime, formatHours, getStatusText, getStatusColor } from '../utils/format';
+import { useStore } from '../store/useStore';
 import type { Dehumidifier, HumidityRecord, DefrostHistory } from '../types';
-
-const HUMIDITY_THRESHOLD = 58;
 
 interface HumidityChartData {
   time: string;
@@ -40,7 +35,8 @@ interface HumidityChartData {
 export default function DehumidifierDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [dehumidifier, setDehumidifier] = useState<(Dehumidifier & { defrostHistories: DefrostHistory[] }) | null>(null);
+  const { systemConfig } = useStore();
+  const [dehumidifier, setDehumidifier] = useState<(Dehumidifier & { defrostHistories: DefrostHistory[]; humidityData: HumidityRecord[] }) | null>(null);
   const [humidityData, setHumidityData] = useState<HumidityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -49,26 +45,26 @@ export default function DehumidifierDetail() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async () => {
+  const humidityThreshold = systemConfig?.humidityThreshold ?? 58;
+  const consecutiveHighCount = systemConfig?.consecutiveHighCount ?? 3;
+
+  const fetchData = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const [dehumidifierRes, humidityRes] = await Promise.all([
-        api.dehumidifiers.get(parseInt(id)),
-        api.dehumidifiers.getHumidity(parseInt(id), 72),
-      ]);
-      setDehumidifier(dehumidifierRes.data);
-      setHumidityData(humidityRes.data);
+      const res = await api.dehumidifiers.get(parseInt(id));
+      setDehumidifier(res.data);
+      setHumidityData(res.data.humidityData || []);
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchData();
-  }, [id]);
+  }, [fetchData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -100,10 +96,10 @@ export default function DehumidifierDetail() {
       minute: '2-digit',
     }),
     humidity: record.humidity,
-    isHigh: record.humidity > HUMIDITY_THRESHOLD,
+    isHigh: record.humidity > humidityThreshold,
   }));
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: HumidityChartData }>; label?: string }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -111,12 +107,12 @@ export default function DehumidifierDetail() {
           <p className="text-sm text-slate-500">{label}</p>
           <p
             className={`text-lg font-bold ${
-              data.humidity > HUMIDITY_THRESHOLD ? 'text-red-600' : 'text-teal-600'
+              data.humidity > humidityThreshold ? 'text-red-600' : 'text-teal-600'
             }`}
           >
             {data.humidity.toFixed(1)}%
           </p>
-          {data.humidity > HUMIDITY_THRESHOLD && (
+          {data.humidity > humidityThreshold && (
             <p className="text-xs text-red-500 mt-1">超出阈值</p>
           )}
         </div>
@@ -190,7 +186,7 @@ export default function DehumidifierDetail() {
                 湿度趋势（最近72小时）
               </h2>
               <div className="text-sm text-slate-500">
-                阈值：<span className="font-medium text-red-600">{HUMIDITY_THRESHOLD}%</span>
+                阈值：<span className="font-medium text-red-600">{humidityThreshold}%</span>
               </div>
             </div>
             <div className="h-80">
@@ -221,12 +217,12 @@ export default function DehumidifierDetail() {
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <ReferenceLine
-                    y={HUMIDITY_THRESHOLD}
+                    y={humidityThreshold}
                     stroke="#EF4444"
                     strokeDasharray="5 5"
                     strokeWidth={2}
                     label={{
-                      value: '阈值 58%',
+                      value: `阈值 ${humidityThreshold}%`,
                       position: 'right',
                       fill: '#EF4444',
                       fontSize: 12,
@@ -238,8 +234,8 @@ export default function DehumidifierDetail() {
                     stroke="#0D9488"
                     strokeWidth={3}
                     fill="url(#colorHumidity)"
-                    dot={(props: any) => {
-                      if (props.payload.humidity > HUMIDITY_THRESHOLD) {
+                    dot={(props: { cx: number; cy: number; payload: HumidityChartData }) => {
+                      if (props.payload.humidity > humidityThreshold) {
                         return (
                           <circle
                             cx={props.cx}
@@ -319,7 +315,7 @@ export default function DehumidifierDetail() {
                   <div>
                     <p className="font-bold text-red-800">待除霜预警</p>
                     <p className="text-sm text-red-600 mt-1">
-                      该设备已超过计划除霜间隔，且连续 {consecutiveHigh} 次湿度高于 {HUMIDITY_THRESHOLD}%
+                      该设备已超过计划除霜间隔，且连续 {consecutiveHigh} 次湿度高于 {humidityThreshold}%
                     </p>
                   </div>
                 </div>
@@ -341,7 +337,7 @@ export default function DehumidifierDetail() {
                 <span className="text-slate-500">当前湿度</span>
                 <span
                   className={`font-medium ${
-                    dehumidifier.latestHumidity && dehumidifier.latestHumidity > HUMIDITY_THRESHOLD
+                    dehumidifier.latestHumidity && dehumidifier.latestHumidity > humidityThreshold
                       ? 'text-red-600'
                       : 'text-slate-900'
                   }`}
@@ -354,7 +350,7 @@ export default function DehumidifierDetail() {
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                 <span className="text-slate-500">连续高湿次数</span>
                 <span
-                  className={`font-medium ${consecutiveHigh >= 3 ? 'text-red-600' : 'text-slate-900'}`}
+                  className={`font-medium ${consecutiveHigh >= consecutiveHighCount ? 'text-red-600' : 'text-slate-900'}`}
                 >
                   {consecutiveHigh} 次
                 </span>

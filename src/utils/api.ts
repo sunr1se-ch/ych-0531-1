@@ -10,6 +10,7 @@ import type {
   InspectionRecord,
   InspectionWorkbenchItem,
   InspectionWorkbenchDetail,
+  SystemConfig,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -36,6 +37,11 @@ async function request<T>(
 }
 
 export const api = {
+  config: {
+    get: () =>
+      request<ApiResponse<SystemConfig>>(`/config`),
+  },
+
   dehumidifiers: {
     list: (status?: string) => 
       request<ApiResponse<Dehumidifier[]>>(
@@ -43,7 +49,7 @@ export const api = {
       ),
     
     get: (id: number) =>
-      request<ApiResponse<Dehumidifier & { defrostHistories: DefrostHistory[] }>>(
+      request<ApiResponse<Dehumidifier & { defrostHistories: DefrostHistory[]; humidityData: HumidityRecord[] }>>(
         `/dehumidifiers/${id}`
       ),
     
