@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Dehumidifier {
+  id                  Int                @id @default(autoincrement())
+  name                String
+  code                String             @unique
+  defrostIntervalHours Int
+  lastDefrostAt       DateTime
+  status              String             @default("normal")
+  coolingZone         String
+  createdAt           DateTime           @default(now())
+  humidityRecords     HumidityRecord[]
+  defrostHistories    DefrostHistory[]
+  collectionBatches   CollectionBatch[]
+}
+
+model HumidityRecord {
+  id             Int          @id @default(autoincrement())
+  dehumidifierId Int
+  humidity       Decimal @db.Decimal(5, 2)
+  recordedAt     DateTime     @default(now())
+  dehumidifier   Dehumidifier @relation(fields: [dehumidifierId], references: [id])
+
+  @@index([dehumidifierId, recordedAt(sort: Desc)])
+}
+
+model DefrostHistory {
+  id             Int          @id @default(autoincrement())
+  dehumidifierId Int
+  completedAt    DateTime     @default(now())
+  operatorName   String
+  remark         String?
+  dehumidifier   Dehumidifier @relation(fields: [dehumidifierId], references: [id])
+}
+
+model CollectionBatch {
+  id               Int                @id @default(autoincrement())
+  batchNo          String             @unique
+  name             String
+  dehumidifierId   Int
+  status           String             @default("in_stock")
+  isRiskOutbound   Boolean            @default(false)
+  riskReason       String?
+  dehumidifier     Dehumidifier       @relation(fields: [dehumidifierId], references: [id])
+  inspectionRecords InspectionRecord[]
+  outboundLogs     OutboundLog[]
+}
+
+model InspectionRecord {
+  id                Int             @id @default(autoincrement())
+  collectionBatchId Int
+  paperWarpMm       Decimal @db.Decimal(5, 2)
+  inspectionDate    DateTime
+  inspectorName     String
+  createdAt         DateTime        @default(now())
+  collectionBatch   CollectionBatch @relation(fields: [collectionBatchId], references: [id])
+}
+
+model OutboundLog {
+  id                Int             @id @default(autoincrement())
+  collectionBatchId Int
+  outboundAt        DateTime        @default(now())
+  operatorName      String
+  isForceOutbound   Boolean         @default(false)
+  forceReason       String?
+  collectionBatch   CollectionBatch @relation(fields: [collectionBatchId], references: [id])
+
+  @@index([outboundAt(sort: Desc)])
+}
