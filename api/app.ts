@@ -15,6 +15,7 @@ import dehumidifierRoutes from './routes/dehumidifiers.js'
 import humidityRoutes from './routes/humidity.js'
 import defrostTodoRoutes from './routes/defrostTodo.js'
 import collectionRoutes from './routes/collections.js'
+import inspectionRoutes from './routes/inspection.js'
 
 dotenv.config()
 
@@ -32,6 +33,7 @@ app.use('/api/dehumidifiers', dehumidifierRoutes)
 app.use('/api/humidity', humidityRoutes)
 app.use('/api/defrost-todo', defrostTodoRoutes)
 app.use('/api/collections', collectionRoutes)
+app.use('/api/inspection', inspectionRoutes)
 
 /**
  * health

@@ -5,6 +5,7 @@ import DehumidifierDetail from "@/pages/DehumidifierDetail";
 import DefrostTodo from "@/pages/DefrostTodo";
 import Collections from "@/pages/Collections";
 import DataEntry from "@/pages/DataEntry";
+import InspectionWorkbench from "@/pages/InspectionWorkbench";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/defrost-todo" element={<DefrostTodo />} />
           <Route path="/collections" element={<Collections />} />
           <Route path="/data-entry" element={<DataEntry />} />
+          <Route path="/inspection" element={<InspectionWorkbench />} />
         </Route>
       </Routes>
     </Router>

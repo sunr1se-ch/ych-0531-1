@@ -8,6 +8,8 @@ import type {
   OutboundCheckResult,
   OutboundResult,
   InspectionRecord,
+  InspectionWorkbenchItem,
+  InspectionWorkbenchDetail,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -115,6 +117,16 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ paperWarpMm, inspectionDate, inspectorName }),
         }
+      ),
+  },
+
+  inspection: {
+    getWorkbench: () =>
+      request<ApiResponse<InspectionWorkbenchItem[]>>(`/inspection/workbench`),
+    
+    getDehumidifierDetail: (id: number) =>
+      request<ApiResponse<InspectionWorkbenchDetail>>(
+        `/inspection/dehumidifier/${id}/detail`
       ),
   },
 };

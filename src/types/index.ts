@@ -91,3 +91,37 @@ export interface OutboundResult {
   isForceOutbound: boolean;
   warning: string | null;
 }
+
+export interface InspectionBatch {
+  id: number;
+  batchNo: string;
+  name: string;
+  status: 'in_stock' | 'out_of_stock';
+  latestInspection: {
+    id: number;
+    paperWarpMm: number;
+    inspectionDate: string;
+    inspectorName: string;
+  } | null;
+}
+
+export interface InspectionWorkbenchItem {
+  id: number;
+  name: string;
+  code: string;
+  status: 'normal' | 'pending_defrost';
+  coolingZone: string;
+  defrostIntervalHours: number;
+  lastDefrostAt: string;
+  latestHumidity: number | null;
+  hoursSinceLastDefrost: number;
+  consecutiveHighHumidity: number;
+  hoursOverdue: number;
+  isPendingDefrost: boolean;
+  affectedBatches: number;
+  collectionBatches: InspectionBatch[];
+}
+
+export interface InspectionWorkbenchDetail extends InspectionWorkbenchItem {
+  humidityData: HumidityRecord[];
+}

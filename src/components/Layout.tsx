@@ -8,11 +8,13 @@ import {
   Menu,
   X,
   AlertTriangle,
+  ClipboardList,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const navItems = [
   { path: '/', label: '除湿机列表', icon: Wind },
+  { path: '/inspection', label: '巡检工作台', icon: ClipboardList },
   { path: '/defrost-todo', label: '待除霜待办', icon: Clock, badge: true },
   { path: '/collections', label: '藏品批次', icon: Archive },
   { path: '/data-entry', label: '数据录入', icon: PlusCircle },
